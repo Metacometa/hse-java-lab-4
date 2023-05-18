@@ -69,7 +69,6 @@ public class House {
      */
     public void generateApplication() {
         synchronized(undistributedApplications) {
-            System.out.println("Applications: " + (undistributedApplications.downwardApplications.size() + undistributedApplications.upwardApplications.size()));
             Random r = new Random();
 
             int direction = r.nextInt(2) + 1;
@@ -140,7 +139,7 @@ public class House {
                 it.remove();
             }
             else if (closestLift.state == state) {
-                if ((closestLift.level <= closestLiftApplications.first() && closestLift.level <= application) || (application <= closestLift.level && closestLiftApplications.last() <= closestLift.level)) {
+                if ((closestLift.level < closestLiftApplications.first() && closestLift.level <= application) || (application <= closestLift.level && closestLiftApplications.last() < closestLift.level)) {
                     closestLiftApplications.add(application);
                     it.remove();
                 }
@@ -151,7 +150,7 @@ public class House {
                 it.remove();
             }
             else if (furthestLift.state == state) {
-                if ((furthestLift.level <= furthestLiftApplications.first() && furthestLift.level <= application) || (application <= furthestLift.level && furthestLiftApplications.last() <= furthestLift.level)) {
+                if ((furthestLift.level < furthestLiftApplications.first() && furthestLift.level <= application) || (application <= furthestLift.level && furthestLiftApplications.last() < furthestLift.level)) {
                     furthestLiftApplications.add(application);
                     it.remove();
                 }
@@ -222,7 +221,6 @@ public class House {
      */
     private void print() {
         synchronized (undistributedApplications) {
-            System.out.println("Stages: " + levels);
             for (int i = levels; i > 0; --i) {
                 if (firstLift.level == i) {
                     System.out.print("E");
