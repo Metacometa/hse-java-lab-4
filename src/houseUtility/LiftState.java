@@ -1,11 +1,14 @@
 package houseUtility;
 
+/**
+ * This enum class contains possible states(directions) of a lift
+ */
 public enum LiftState {
-    UP(1), DOWN(-1), NONE(0), FREE(0), BUSY(2);
+    UP(1), DOWN(-1), FREE(0);
 
     private int value;
 
-    private LiftState(int value) {
+    LiftState(int value) {
         this.value = value;
     }
 

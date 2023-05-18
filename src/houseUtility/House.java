@@ -4,42 +4,115 @@ import java.util.Iterator;
 import java.util.Random;
 import java.util.TreeSet;
 
-@FunctionalInterface
-
-interface Comparator {
-    boolean compare(int a, int b);
-}
-
+/**
+ * Class house controls application and lifts
+ * Separated by three threads that:
+ * - Generates applications
+ * - Distribute applications
+ * - Move lifts and prints the house in a successful case
+ */
 public class House {
-    Lift firstLift;
-    Lift secondLift;
+    private Lift firstLift;
+    private Lift secondLift;
 
     /**
-     * negative value - the downward application
-     * positive value - the upward application
+     * There are upward and downward applications that is not distributed yet
      */
-    ApplicationsHandler applications;
+    private Applications undistributedApplications;
 
-    static Comparator A = (int a, int b) -> a <= b;
-    static Comparator B = (int a, int b) -> a >= b;
+    /**
+     * The number of levels in the house
+     */
+    private int levels;
 
-    int levels;
-
+    /*
+     * @param levels the number of levels in the new house
+     */
     public House(int levels) {
         this.levels = levels;
         firstLift = new Lift();
         secondLift = new Lift();
-        applications = new ApplicationsHandler();
+        undistributedApplications = new Applications();
     }
 
+    /**
+     * Manage firstly upward application and downwad application after
+     */
     public void manageApplications() {
-        synchronized(applications) {
-            manage(applications.upwardApplications.iterator(), firstLift, firstLift.upwardApplications, secondLift, secondLift.upwardApplications, LiftState.UP, A);
-            manage(applications.downwardApplications.iterator(), firstLift, firstLift.downwardApplications, secondLift, secondLift.downwardApplications, LiftState.DOWN, B);
+        synchronized(undistributedApplications) {
+            if (!undistributedApplications.upwardApplications.isEmpty()) {
+                distributeApplications(undistributedApplications.upwardApplications.iterator(), firstLift, firstLift.upwardApplications, secondLift, secondLift.upwardApplications, LiftState.UP);
+            }
+            if (!undistributedApplications.downwardApplications.isEmpty()){
+                distributeApplications(undistributedApplications.downwardApplications.iterator(), firstLift, firstLift.downwardApplications, secondLift, secondLift.downwardApplications, LiftState.DOWN);
+            }
         }
     }
 
-    void manage(Iterator<Integer> it, Lift a, TreeSet<Integer> applicationsA, Lift b, TreeSet<Integer> applicationsB, LiftState state, Comparator c) {
+    /**
+     * Moves first and second lift and prints house in case of successful moving
+     */
+    public void manageLifts() {
+        synchronized(undistributedApplications) {
+            boolean firstLiftMoved = moveLift(firstLift);
+            boolean secondLiftMoved = moveLift(secondLift);
+            if (firstLiftMoved || secondLiftMoved) {
+                print();
+            }
+        }
+    }
+
+    /**
+     * Create an application on random level with random direction
+     * If the first level is randomized, direction is upward
+     * If the last level is randomized, direction is downward
+     */
+    public void generateApplication() {
+        synchronized(undistributedApplications) {
+            System.out.println("Applications: " + (undistributedApplications.downwardApplications.size() + undistributedApplications.upwardApplications.size()));
+            Random r = new Random();
+
+            int direction = r.nextInt(2) + 1;
+            int application = r.nextInt(levels) + 1;
+
+            if (application == 1) {
+                System.out.print("Generated application: ");
+                undistributedApplications.upwardApplications.add(application);
+                System.out.println("↑" + application);
+            }
+            else if (application == levels) {
+                System.out.print("Generated application: ");
+                undistributedApplications.downwardApplications.add(application);
+                System.out.println("↓" + application);
+            }
+            else if ((direction % 2 == 0) && isThisApplicationContained(application, "downward")) {
+                System.out.print("Generated application: ");
+                undistributedApplications.downwardApplications.add(application);
+                System.out.println("↓" + application);
+            }
+            else if (isThisApplicationContained(application, "upward")) {
+                System.out.print("Generated application: ");
+                undistributedApplications.upwardApplications.add(application);
+                System.out.println("↑" + application);
+            }
+            else {
+                return;
+            }
+
+            undistributedApplications.notify();
+        }
+    }
+
+    /**
+     * Distribute undistributed applications between upward and downward application of first and second lifts
+     * @param it iterator to downward or upward undistributed applications
+     * @param a first lift
+     * @param applicationsA upward of downward application of first lift
+     * @param b second lift
+     * @param applicationsB upward of downward application of second lift
+     * @param state state according to upward of downward applications are taken
+     */
+    private void distributeApplications(Iterator<Integer> it, Lift a, TreeSet<Integer> applicationsA, Lift b, TreeSet<Integer> applicationsB, LiftState state) {
         while (it.hasNext()) {
             Integer application = it.next();
 
@@ -53,59 +126,45 @@ public class House {
                 furthestLift = b;
                 closestLiftApplications = applicationsA;
                 furthestLiftApplications = applicationsB;
-            } else {
+            }
+            else {
                 closestLift = b;
                 furthestLift = a;
                 closestLiftApplications = applicationsB;
                 furthestLiftApplications = applicationsA;
             }
 
-            if (closestLift.state == state && c.compare(closestLift.level, application)) {
-                closestLiftApplications.add(application);
-                it.remove();
-            } else if (furthestLift.state == state && c.compare(furthestLift.level, application)) {
-                furthestLiftApplications.add(application);
-                it.remove();
-            } else if (closestLift.state == LiftState.FREE) {
+            if (closestLift.state == LiftState.FREE) {
                 closestLiftApplications.add(application);
                 closestLift.state = state;
                 it.remove();
-            } else if (furthestLift.state == LiftState.FREE) {
+            }
+            else if (closestLift.state == state) {
+                if ((closestLift.level <= closestLiftApplications.first() && closestLift.level <= application) || (application <= closestLift.level && closestLiftApplications.last() <= closestLift.level)) {
+                    closestLiftApplications.add(application);
+                    it.remove();
+                }
+            }
+            else if (furthestLift.state == LiftState.FREE) {
                 furthestLiftApplications.add(application);
                 furthestLift.state = state;
                 it.remove();
             }
+            else if (furthestLift.state == state) {
+                if ((furthestLift.level <= furthestLiftApplications.first() && furthestLift.level <= application) || (application <= furthestLift.level && furthestLiftApplications.last() <= furthestLift.level)) {
+                    furthestLiftApplications.add(application);
+                    it.remove();
+                }
+            }
         }
     }
 
-    boolean moveLift(Lift lift) {
-        /*
-        System.out.print("Upward: ");
-        for (Integer i:lift.upwardApplications) {
-            System.out.print(i + "");
-        }
-        System.out.print("\nDownward: ");
-        for (Integer i:lift.downwardApplications) {
-            System.out.print(i + "");
-        }
-        System.out.println();*/
-
-        /*
-        подумай
-
-        *
-        8
-        *
-        _
-        *
-        4
-        *
-        2
-        *
-
-         */
-        *?
-
+    /**
+     * Move lift according to its handling applications. Makes state "FREE" when applications are empty
+     * @param lift to be moved
+     * @return if lift was moved
+     */
+    private boolean moveLift(Lift lift) {
         if (lift.upwardApplications.isEmpty() && lift.downwardApplications.isEmpty()) {
             lift.state = LiftState.FREE;
             return false;
@@ -116,6 +175,7 @@ public class House {
             }
             if (lift.upwardApplications.isEmpty()) {
                 lift.level++;
+                lift.state = LiftState.FREE;
             }
             else {
                 lift.level += Math.signum(lift.upwardApplications.first() - lift.level);
@@ -128,6 +188,7 @@ public class House {
 
             if (lift.downwardApplications.isEmpty()) {
                 lift.level--;
+                lift.state = LiftState.FREE;
             }
             else {
                 lift.level += Math.signum(lift.downwardApplications.last() - lift.level);
@@ -139,57 +200,28 @@ public class House {
         return true;
     }
 
-    public void moveFirstLift() {
-        synchronized(applications) {
-            if (moveLift(firstLift)) {
-                System.out.println("Moved first list");
-                applications.notify();
-            }
 
+    /**
+     * @param application a new application
+     * @param direction direction of a new application
+     * @return does such appliaction exists
+     */
+    private boolean isThisApplicationContained(int application, String direction) {
+        switch(direction) {
+            case "upward":
+                return !firstLift.upwardApplications.contains(application) && !secondLift.upwardApplications.contains(application);
+            case "downward":
+                return !firstLift.downwardApplications.contains(application) && !secondLift.downwardApplications.contains(application);
+            default:
+                return false;
         }
     }
 
-    public void moveSecondLift() {
-        synchronized(applications) {
-            if (moveLift(secondLift)) {
-                System.out.println("Moved second list");
-                applications.notify();
-            }
-        }
-    }
-
-    public void generateApplication() {
-        synchronized(applications) {
-            Random r = new Random();
-
-            int direction = r.nextInt(2) + 1;
-            int application = r.nextInt(levels) + 1;
-
-            if ((application == 1) && (!firstLift.upwardApplications.contains(application) && !secondLift.upwardApplications.contains(application))) {
-                System.out.print("Generated application: ");
-                applications.upwardApplications.add(application);
-                System.out.println("↑" + application);
-            }
-            else if ((application == levels) && (!firstLift.downwardApplications.contains(application) && !secondLift.downwardApplications.contains(application))) {
-                System.out.print("Generated application: ");
-                applications.downwardApplications.add(application);
-                System.out.println("↓" + application);
-            }
-            else if ((direction % 2 == 0) && (!firstLift.downwardApplications.contains(application) && !secondLift.downwardApplications.contains(application))) {
-                System.out.print("Generated application: ");
-                applications.downwardApplications.add(application);
-                System.out.println("↓" + application);
-            }
-            else if (!firstLift.upwardApplications.contains(application) && !secondLift.upwardApplications.contains(application)) {
-                System.out.print("Generated application: ");
-                applications.upwardApplications.add(application);
-                System.out.println("↑" + application);
-            }
-        }
-    }
-
-    public void print() {
-        synchronized (applications) {
+    /**
+     * Prints house as ascii-art
+     */
+    private void print() {
+        synchronized (undistributedApplications) {
             System.out.println("Stages: " + levels);
             for (int i = levels; i > 0; --i) {
                 if (firstLift.level == i) {
@@ -201,20 +233,20 @@ public class House {
 
                 System.out.print("|");
 
-                if (applications.upwardApplications.contains(i) || firstLift.upwardApplications.contains(i) || secondLift.upwardApplications.contains(i)) {
+                if (undistributedApplications.upwardApplications.contains(i) || firstLift.upwardApplications.contains(i) || secondLift.upwardApplications.contains(i)) {
                     System.out.print("↑");
                 }
                 else {
                     System.out.print("_");
                 }
-                if (applications.downwardApplications.contains(i) || firstLift.downwardApplications.contains(i) || secondLift.downwardApplications.contains(i)) {
+                if (undistributedApplications.downwardApplications.contains(i) || firstLift.downwardApplications.contains(i) || secondLift.downwardApplications.contains(i)) {
                     System.out.print("↓");
                 }
                 else {
                     System.out.print("_");
                 }
 
-                if (applications.contains(i) || firstLift.contains(i) || secondLift.contains(i)) {
+                if (undistributedApplications.contains(i) || firstLift.contains(i) || secondLift.contains(i)) {
                     if (i < 10) {
                         System.out.print("_");
                     }
@@ -237,65 +269,17 @@ public class House {
                 System.out.println();
             }
             System.out.println();
-
-            try {
-                applications.wait();
-            } catch (InterruptedException e) {
-                System.err.println(e.getMessage());
-            }
-
         }
     }
 
-    int findClosestApplication(int level) {
-        int closest = levels - 0;
-        int nextLevel = level;
-
-        int distance = 0;
-        if (applications.upwardApplications.higher(level) != null) {
-            distance = getDistance(level, (int)applications.upwardApplications.higher(level));
-            getClosestLevel(level, closest, nextLevel, distance);
-        }
-
-        if (applications.upwardApplications.lower(level) != null) {
-            distance = getDistance(level, (int)applications.upwardApplications.lower(level));
-            getClosestLevel(level, closest, nextLevel, distance);
-        }
-
-        if (applications.downwardApplications.higher(level) != null) {
-            distance = getDistance(level, (int)applications.downwardApplications.higher(level));
-            getClosestLevel(level, closest, nextLevel, distance);
-        }
-
-        if (applications.downwardApplications.lower(level) != null) {
-            distance = getDistance(level, (int)applications.downwardApplications.lower(level));
-            getClosestLevel(level, closest, nextLevel, distance);
-        }
-        return nextLevel;
-    }
-
-    //utilities
-    void getClosestLevel(int level, int closest, int nextLevel, int distance) {
-        if (Math.abs(distance) < closest) {
-            nextLevel = level - distance;
-            closest = distance;
-        }
-    }
-
-    int getDistance(int a, int b) {
+    /**
+     * @param a level
+     * @param b level
+     * @return distance between levels
+     */
+    private int getDistance(int a, int b) {
         return Math.abs(a - b);
     }
 
-    LiftState getDirection(int source) {
-        if (source < 0) {
-            return LiftState.UP;
-        }
-        else if (source > 0) {
-            return LiftState.DOWN;
-        }
-        else {
-            return LiftState.NONE;
-        }
-    }
 
 }

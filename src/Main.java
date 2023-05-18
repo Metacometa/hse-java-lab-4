@@ -1,27 +1,30 @@
 import houseUtility.*;
 
+import java.util.Scanner;
+
 public class Main {
 
     public static void main(String[] args) {
-        int levels = 10;
-        int applicationsDelay = 2000;
-        int printDelay = 0;
+        Scanner input = new Scanner(System.in);
 
-        House house = new House(levels);
+        System.out.println("Введите количество этажей: ");
+        House house = new House(input.nextInt());
 
-        HouseThread lift1 = new HouseThread(house::moveFirstLift, 1000);
-        lift1.start();
+        System.out.println("Введите интервал между заявками в секундах: ");
+        HouseThread applicationsGenerator = new HouseThread(house::generateApplication, input.nextInt() * 1000);
 
-        HouseThread lift2 = new HouseThread(house::moveSecondLift, 1000);
-        lift2.start();
+        System.out.println("Введите скорость перехода лифта на следующий этаж в секундах: ");
+        HouseThread liftsManager = new HouseThread(house::manageLifts, input.nextInt() * 1000);
 
-        HouseThread applicationsGenerator = new HouseThread(house::generateApplication, applicationsDelay);
+        System.out.println("Введите интервал между распределениями заявок по лифтам: ");
+        HouseThread applicationManager = new HouseThread(house::manageApplications, input.nextInt() * 1000);
+
+        liftsManager.start();
         applicationsGenerator.start();
-
-        HouseThread applicationManager = new HouseThread(house::manageApplications, 100);
         applicationManager.start();
 
-        HouseThread printing = new HouseThread(house::print, printDelay);
-        printing.start();
+
+
+
     }
 }
